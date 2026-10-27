@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Запись</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fbf7f5;
+    --card: #ffffff;
+    --text: #2b2220;
+    --hint: #9a8c88;
+    --line: #efe6e2;
+    --accent: #c47f75;
+    --accent-dark: #a9645b;
+    --accent-soft: #f6e9e5;
+    --radius: 18px;
+    --shadow: 0 6px 20px rgba(120, 72, 60, .08);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 15px/1.45 "Manrope", -apple-system, "Segoe UI", Roboto, sans-serif; padding-bottom: 96px; }
+  .serif { font-family: "Cormorant Garamond", Georgia, serif; }
+  button { font: inherit; color: inherit; }
+
+  .screen { display: none; animation: in .25s ease; }
+  .screen.active { display: block; }
+  @keyframes in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* Заглушки фото: мягкий градиент + подпись */
+  .ph {
+    position: relative; overflow: hidden; border-radius: 14px;
+    background: linear-gradient(135deg, hsl(var(--h, 12) 55% 88%), hsl(calc(var(--h, 12) + 25) 50% 78%));
+  }
+  .ph::before {
+    content: ""; position: absolute; width: 70%; aspect-ratio: 1; border-radius: 50%;
+    right: -20%; top: -25%; background: rgba(255, 255, 255, .35);
+  }
+  .ph::after {
+    content: attr(data-label); position: absolute; left: 0; right: 0; bottom: 6px;
+    text-align: center; font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+    color: rgba(255, 255, 255, .9);
+  }
+  .ph .emoji { position: absolute; inset: 0; display: grid; place-items: center; font-size: 26px; }
+
+  /* ---------- Главная ---------- */
+  .cover {
+    height: 170px; position: relative;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(255,255,255,.35) 0 18%, transparent 19%),
+      radial-gradient(circle at 85% 70%, rgba(255,255,255,.25) 0 22%, transparent 23%),
+      linear-gradient(135deg, #e9c3b8, #c9877c 60%, #a9645b);
+  }
+  .cover::after {
+    content: "обложка салона"; position: absolute; right: 14px; top: 12px;
+    font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.8);
+  }
+  .profile { padding: 0 16px; margin-top: -44px; position: relative; text-align: center; }
+  .logo {
+    width: 88px; height: 88px; margin: 0 auto; border-radius: 50%;
+    background: var(--card); border: 4px solid var(--bg); box-shadow: var(--shadow);
+    display: grid; place-items: center; font-size: 32px; font-weight: 600; color: var(--accent);
+  }
+  .profile h1 { margin: 10px 0 0; font-size: 30px; font-weight: 600; line-height: 1.1; }
+  .profile .tagline { color: var(--hint); margin-top: 2px; }
+  .meta { display: flex; justify-content: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .pill {
+    background: var(--card); border-radius: 999px; padding: 6px 12px; font-size: 13px;
+    box-shadow: var(--shadow); display: inline-flex; align-items: center; gap: 5px;
+  }
+  .pill b { font-weight: 700; }
+  .star { color: #e0a43a; }
+
+  .section-title {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin: 26px 16px 12px; font-size: 22px; font-weight: 600;
+  }
+  .section-title small { font-family: "Manrope", sans-serif; font-size: 13px; color: var(--hint); font-weight: 500; }
+
+  .gallery { display: flex; gap: 10px; overflow-x: auto; padding: 0 16px 4px; scrollbar-width: none; }
+  .gallery::-webkit-scrollbar { display: none; }
+  .gallery .ph { flex: 0 0 116px; height: 140px; }
+
+  .tabs {
+    position: sticky; top: 0; z-index: 5; background: var(--bg);
+    display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex: 0 0 auto; border: 0; border-radius: 999px; padding: 8px 16px; cursor: pointer;
+    background: var(--card); color: var(--text); font-weight: 600; font-size: 14px;
+    box-shadow: var(--shadow); transition: background .15s, color .15s;
+  }
+  .tab.active { background: var(--accent); color: #fff; }
+
+  .services { display: grid; gap: 10px; padding: 4px 16px 0; }
+  .service {
+    display: flex; align-items: center; gap: 14px; padding: 10px; cursor: pointer;
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    transition: transform .1s;
+  }
+  .service:active { transform: scale(.98); }
+  .service .ph { flex: 0 0 76px; height: 76px; }
+  .service .info { flex: 1; min-width: 0; }
+  .service .name { font-weight: 700; font-size: 16px; }
+  .service .dur { color: var(--hint); font-size: 13px; margin-top: 2px; }
+  .service .price { margin-top: 6px; font-weight: 700; color: var(--accent-dark); }
+  .chev {
+    flex: 0 0 34px; height: 34px; border-radius: 50%; background: var(--accent-soft);
+    display: grid; place-items: center; color: var(--accent-dark); font-size: 18px; margin-right: 4px;
+  }
+
+  /* ---------- Выбор времени ---------- */
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 14px 16px 4px; }
+  .back {
+    width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--card);
+    box-shadow: var(--shadow); font-size: 18px; cursor: pointer;
+  }
+  .topbar h2 { margin: 0; font-size: 26px; font-weight: 600; }
+  .chosen {
+    margin: 12px 16px 0; display: flex; gap: 12px; align-items: center;
+    background: var(--card); border-radius: var(--radius); padding: 10px; box-shadow: var(--shadow);
+  }
+  .chosen .ph { flex: 0 0 52px; height: 52px; border-radius: 12px; }
+  .chosen .ph::after { display: none; }
+  .chosen .ph .emoji { font-size: 20px; }
+  .chosen .name { font-weight: 700; }
+  .chosen .sub { color: var(--hint); font-size: 13px; }
+
+  .label { margin: 22px 16px 10px; font-weight: 700; display: flex; justify-content: space-between; }
+  .label span { color: var(--hint); font-weight: 500; text-transform: capitalize; }
+  .days { display: flex; gap: 8px; overflow-x: auto; padding: 2px 16px 6px; scrollbar-width: none; }
+  .days::-webkit-scrollbar { display: none; }
+  .day {
+    flex: 0 0 58px; padding: 10px 0; text-align: center; border-radius: 16px; cursor: pointer;
+    background: var(--card); box-shadow: var(--shadow); transition: background .15s;
+  }
+  .day .wd { font-size: 12px; color: var(--hint); }
+  .day .num { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .day.disabled { opacity: .35; pointer-events: none; box-shadow: none; }
+  .day.active { background: var(--accent); color: #fff; }
+  .day.active .wd { color: rgba(255,255,255,.85); }
+
+  .period { margin: 14px 16px 0; }
+  .period-title { font-size: 13px; color: var(--hint); margin-bottom: 8px; }
+  .times { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .time {
+    padding: 11px 0; text-align: center; border-radius: 12px; cursor: pointer; font-weight: 600;
+    background: var(--card); border: 1.5px solid var(--line);
+  }
+  .time.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .empty { margin: 8px 16px; color: var(--hint); }
+
+  /* ---------- Подтверждение ---------- */
+  .ticket { margin: 14px 16px 0; background: var(--card); border-radius: 22px; box-shadow: var(--shadow); overflow: hidden; }
+  .ticket .ph { height: 150px; border-radius: 0; }
+  .ticket .ph .emoji { font-size: 44px; }
+  .ticket-body { padding: 16px 18px 18px; }
+  .ticket-body h3 { margin: 0 0 12px; font-size: 26px; font-weight: 600; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .row .k { color: var(--hint); }
+  .row .v { font-weight: 600; text-align: right; }
+  .total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; padding-top: 12px; border-top: 1.5px solid var(--line); }
+  .total .v { font-size: 24px; font-weight: 700; color: var(--accent-dark); }
+  .note { margin: 14px 20px 0; text-align: center; color: var(--hint); font-size: 13px; }
+
+  #fallback-btn {
+    position: fixed; left: 16px; right: 16px; bottom: 16px; padding: 15px; border: 0;
+    border-radius: 16px; font-size: 16px; font-weight: 700; color: #fff; background: var(--accent);
+    box-shadow: 0 8px 24px rgba(196, 127, 117, .4); cursor: pointer;
+  }
+  #fallback-btn:disabled { opacity: .45; box-shadow: none; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- Главная -->
+<section class="screen active" id="home">
+  <div class="cover"></div>
+  <div class="profile">
+    <div class="logo serif" id="logo"></div>
+    <h1 class="serif" id="salon-name"></h1>
+    <div class="tagline" id="salon-tagline"></div>
+    <div class="meta">
+      <span class="pill"><span class="star">★</span><b id="salon-rating"></b><span id="salon-reviews"></span></span>
+      <span class="pill">📍 <span id="salon-address"></span></span>
+    </div>
+  </div>
+
+  <div class="section-title serif">Наши работы <small>листайте →</small></div>
+  <div class="gallery" id="gallery"></div>
+
+  <div class="section-title serif">Услуги</div>
+  <div class="tabs" id="tabs"></div>
+  <div class="services" id="services"></div>
+</section>
+
+<!-- Дата и время -->
+<section class="screen" id="book">
+  <div class="topbar"><button class="back" data-back>←</button><h2 class="serif">Дата и время</h2></div>
+  <div class="chosen" id="chosen"></div>
+  <div class="label">Дата <span id="month"></span></div>
+  <div class="days" id="days"></div>
+  <div id="times"></div>
+</section>
+
+<!-- Подтверждение -->
+<section class="screen" id="confirm">
+  <div class="topbar"><button class="back" data-back>←</button><h2 class="serif">Проверьте запись</h2></div>
+  <div class="ticket" id="ticket"></div>
+  <p class="note">Отменить запись можно в боте в разделе «Мои записи»</p>
+</section>
+
+<button id="fallback-btn" class="hidden"></button>
+
+<script>
+  const tg = window.Telegram && window.Telegram.WebApp;
+  // initData пуст при запуске с кнопки клавиатуры, поэтому проверяем платформу
+  const inTelegram = !!(tg && tg.platform && tg.platform !== "unknown");
+  const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const WEEKDAYS_FULL = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
+  const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+  const MONTHS_NOM = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+  // Оттенок заглушки фото и иконка для каждой услуги
+  const LOOK = {
+    manicure: [350, "💅"], pedicure: [20, "🦶"], brows: [30, "✨"],
+    lashes: [300, "👁"], haircut: [12, "💇‍♀️"],
+  };
+  const look = key => LOOK[key] || [15, "🌸"];
+
+  // Бот передаёт настройки и занятое время в параметре ?d= (base64url JSON)
+  function loadConfig() {
+    const raw = new URLSearchParams(location.search).get("d");
+    if (raw) {
+      const b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes));
+    }
+    // Демо-данные для просмотра в обычном браузере
+    return {
+      s: [["manicure", "Маникюр", 60, 1500], ["pedicure", "Педикюр", 90, 2000],
+          ["brows", "Коррекция бровей", 30, 800], ["lashes", "Наращивание ресниц", 120, 2500],
+          ["haircut", "Стрижка", 60, 1800]],
+      h: [10, 20, 30], n: 14, off: [6], b: {},
+    };
+  }
+
+  const cfg = loadConfig();
+  const salon = Object.assign(
+    { name: "Beauty Studio", tagline: "Студия красоты", address: "ул. Примерная, 12", rating: 4.9, reviews: 128 },
+    cfg.i || {});
+  const categories = cfg.c || { "Ногти": ["manicure", "pedicure"], "Брови и ресницы": ["brows", "lashes"], "Волосы": ["haircut"] };
+  const [WORK_START, WORK_END, STEP] = cfg.h;
+  const state = { screen: "home", tab: "Все", service: null, day: null, time: null };
+
+  const $ = id => document.getElementById(id);
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const parseIso = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const weekday = d => (d.getDay() + 6) % 7;  // 0 = понедельник, как в Python
+  const plural = (n, one, few, many) =>
+    n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many;
+
+  function freeSlots(day, duration) {
+    const busy = cfg.b[iso(day)] || [];
+    const now = new Date();
+    const isToday = iso(day) === iso(now);
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const slots = [];
+    for (let s = WORK_START * 60; s + duration <= WORK_END * 60; s += STEP) {
+      if (isToday && s <= nowMin) continue;
+      if (busy.some(([bs, be]) => s < be && s + duration > bs)) continue;
+      slots.push(s);
+    }
+    return slots;
+  }
+
+  function photo(key, label, extraClass = "") {
+    const [h, emoji] = look(key);
+    return `<div class="ph ${extraClass}" style="--h:${h}" data-label="${label}"><span class="emoji">${emoji}</span></div>`;
+  }
+
+  function haptic(type = "select") {
+    if (!inTelegram) return;
+    type === "select" ? tg.HapticFeedback.selectionChanged() : tg.HapticFeedback.impactOccurred("light");
+  }
+
+  // ---------- Главная ----------
+  function renderHome() {
+    $("logo").textContent = salon.name.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+    $("salon-name").textContent = salon.name;
+    $("salon-tagline").textContent = salon.tagline;
+    $("salon-rating").textContent = salon.rating;
+    $("salon-reviews").textContent = ` · ${salon.reviews} ${plural(salon.reviews, "отзыв", "отзыва", "отзывов")}`;
+    $("salon-address").textContent = salon.address;
+
+    const hues = [350, 20, 300, 30, 12, 330];
+    $("gallery").innerHTML = hues.map((h, i) =>
+      `<div class="ph" style="--h:${h}" data-label="фото ${i + 1}"></div>`).join("");
+
+    const tabs = ["Все", ...Object.keys(categories)];
+    $("tabs").innerHTML = tabs.map(t =>
+      `<button class="tab${t === state.tab ? " active" : ""}" data-tab="${t}">${t}</button>`).join("");
+    $("tabs").querySelectorAll(".tab").forEach(b => b.onclick = () => {
+      haptic(); state.tab = b.dataset.tab; renderHome();
+    });
+
+    const visible = cfg.s.filter(([key]) => state.tab === "Все" || (categories[state.tab] || []).includes(key));
+    $("services").innerHTML = visible.map(([key, name, dur, price]) => `
+      <div class="service" data-key="${key}">
+        ${photo(key, "фото")}
+        <div class="info">
+          <div class="name">${name}</div>
+          <div class="dur">${dur} мин</div>
+          <div class="price">${price.toLocaleString("ru-RU")} ₽</div>
+        </div>
+        <div class="chev">›</div>
+      </div>`).join("");
+    $("services").querySelectorAll(".service").forEach(el => el.onclick = () => {
+      haptic("tap");
+      state.service = cfg.s.find(s => s[0] === el.dataset.key);
+      state.day = null; state.time = null;
+      go("book");
+    });
+  }
+
+  // ---------- Дата и время ----------
+  function renderBook() {
+    const [key, name, dur, price] = state.service;
+    $("chosen").innerHTML = `${photo(key, "")}
+      <div><div class="name">${name}</div><div class="sub">${dur} мин · ${price.toLocaleString("ru-RU")} ₽</div></div>`;
+
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const days = [];
+    for (let i = 0; i < cfg.n; i++) {
+      const d = new Date(today); d.setDate(today.getDate() + i);
+      const available = !cfg.off.includes(weekday(d)) && freeSlots(d, dur).length > 0;
+      days.push([d, available]);
+    }
+    if (!state.day) { const first = days.find(([, ok]) => ok); state.day = first ? iso(first[0]) : null; }
+
+    $("days").innerHTML = days.map(([d, ok]) => `
+      <div class="day${ok ? "" : " disabled"}${state.day === iso(d) ? " active" : ""}" data-day="${iso(d)}">
+        <div class="wd">${WEEKDAYS[weekday(d)]}</div><div class="num">${d.getDate()}</div>
+      </div>`).join("");
+    $("days").querySelectorAll(".day").forEach(el => el.onclick = () => {
+      haptic(); state.day = el.dataset.day; state.time = null; renderBook(); update();
+    });
+    $("month").textContent = state.day ? MONTHS_NOM[parseIso(state.day).getMonth()] : "";
+
+    if (!state.day) { $("times").innerHTML = `<p class="empty">Нет свободных дней</p>`; return; }
+    const slots = freeSlots(parseIso(state.day), dur);
+    const periods = [["Утро", 0, 12 * 60], ["День", 12 * 60, 17 * 60], ["Вечер", 17 * 60, 24 * 60]];
+    $("times").innerHTML = `<div class="label">Время</div>` + periods.map(([title, from, to]) => {
+      const list = slots.filter(s => s >= from && s < to);
+      if (!list.length) return "";
+      return `<div class="period"><div class="period-title">${title}</div><div class="times">${
+        list.map(s => `<div class="time${state.time === hhmm(s) ? " active" : ""}" data-time="${hhmm(s)}">${hhmm(s)}</div>`).join("")
+      }</div></div>`;
+    }).join("");
+    $("times").querySelectorAll(".time").forEach(el => el.onclick = () => {
+      haptic(); state.time = el.dataset.time; renderBook(); update();
+    });
+  }
+
+  // ---------- Подтверждение ----------
+  function renderConfirm() {
+    const [key, name, dur, price] = state.service;
+    const d = parseIso(state.day);
+    $("ticket").innerHTML = `
+      ${photo(key, "фото услуги")}
+      <div class="ticket-body">
+        <h3 class="serif">${name}</h3>
+        <div class="row"><span class="k">Дата</span><span class="v">${d.getDate()} ${MONTHS[d.getMonth()]}, ${WEEKDAYS_FULL[weekday(d)]}</span></div>
+        <div class="row"><span class="k">Время</span><span class="v">${state.time}</span></div>
+        <div class="row"><span class="k">Длительность</span><span class="v">${dur} мин</span></div>
+        <div class="row"><span class="k">Адрес</span><span class="v">${salon.address}</span></div>
+        <div class="total"><span class="k">Итого</span><span class="v">${price.toLocaleString("ru-RU")} ₽</span></div>
+      </div>`;
+  }
+
+  // ---------- Навигация и главная кнопка ----------
+  const BACK = { book: "home", confirm: "book" };
+
+  function go(screen) {
+    state.screen = screen;
+    document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === screen));
+    window.scrollTo(0, 0);
+    if (screen === "home") renderHome();
+    if (screen === "book") renderBook();
+    if (screen === "confirm") renderConfirm();
+    if (inTelegram) BACK[screen] ? tg.BackButton.show() : tg.BackButton.hide();
+    document.querySelectorAll("[data-back]").forEach(b => b.classList.toggle("hidden", inTelegram));
+    update();
+  }
+
+  function goBack() { if (BACK[state.screen]) { haptic(); go(BACK[state.screen]); } }
+
+  function mainButton() {
+    if (state.screen === "book") {
+      if (!state.time) return { text: "Выберите время", enabled: false, visible: true };
+      const d = parseIso(state.day);
+      return { text: `Далее · ${d.getDate()} ${MONTHS[d.getMonth()]}, ${state.time}`, enabled: true, visible: true };
+    }
+    if (state.screen === "confirm") return { text: "Подтвердить запись", enabled: true, visible: true };
+    return { visible: false };
+  }
+
+  function update() {
+    const mb = mainButton();
+    if (inTelegram) {
+      if (!mb.visible) { tg.MainButton.hide(); return; }
+      tg.MainButton.setParams({
+        text: mb.text, color: mb.enabled ? "#c47f75" : "#d9c4bf", text_color: "#ffffff",
+        is_active: mb.enabled, is_visible: true,
+      });
+    } else {
+      const btn = $("fallback-btn");
+      btn.classList.toggle("hidden", !mb.visible);
+      btn.disabled = !mb.enabled;
+      btn.textContent = mb.text || "";
+    }
+  }
+
+  function onMain() {
+    if (state.screen === "book" && state.time) { haptic("tap"); go("confirm"); return; }
+    if (state.screen === "confirm") {
+      const payload = JSON.stringify({ service: state.service[0], day: state.day, time: state.time });
+      if (inTelegram) {
+        tg.HapticFeedback.notificationOccurred("success");
+        tg.sendData(payload);  // приложение закроется, бот получит данные
+      } else {
+        alert("В Telegram боту уйдёт:\n" + payload);
+      }
+    }
+  }
+
+  if (inTelegram) {
+    tg.ready();
+    tg.expand();
+    try { tg.setHeaderColor("#fbf7f5"); tg.setBackgroundColor("#fbf7f5"); } catch (e) {}  // старые клиенты
+    tg.MainButton.onClick(onMain);
+    tg.BackButton.onClick(goBack);
+  }
+  $("fallback-btn").onclick = onMain;
+  document.querySelectorAll("[data-back]").forEach(b => b.onclick = goBack);
+
+  go("home");
+</script>
+</body>
+</html>
