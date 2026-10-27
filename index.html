@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Запись</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --bg2: var(--tg-theme-secondary-bg-color, #f3f1f5);
+    --text: var(--tg-theme-text-color, #1d1b20);
+    --hint: var(--tg-theme-hint-color, #8a8590);
+    --accent: var(--tg-theme-button-color, #c2185b);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 16px 16px 96px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 22px; margin: 4px 0 2px; }
+  .sub { color: var(--hint); margin: 0 0 20px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--hint); margin: 24px 0 10px; font-weight: 600; }
+  .services { display: grid; gap: 8px; }
+  .service {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg2); border: 2px solid transparent; border-radius: var(--radius);
+    padding: 12px 14px; cursor: pointer; transition: border-color .15s;
+  }
+  .service .icon { font-size: 26px; }
+  .service .name { font-weight: 600; }
+  .service .meta { color: var(--hint); font-size: 13px; }
+  .service .price { margin-left: auto; font-weight: 600; white-space: nowrap; }
+  .service.active { border-color: var(--accent); }
+  .days { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+  .days::-webkit-scrollbar { display: none; }
+  .day {
+    flex: 0 0 56px; text-align: center; padding: 8px 0; border-radius: var(--radius);
+    background: var(--bg2); cursor: pointer;
+  }
+  .day .wd { font-size: 12px; color: var(--hint); }
+  .day .num { font-size: 18px; font-weight: 600; }
+  .day.disabled { opacity: .35; pointer-events: none; }
+  .day.active { background: var(--accent); color: var(--accent-text); }
+  .day.active .wd { color: var(--accent-text); opacity: .8; }
+  .times { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .time {
+    text-align: center; padding: 10px 0; border-radius: 10px;
+    background: var(--bg2); cursor: pointer; font-weight: 500;
+  }
+  .time.active { background: var(--accent); color: var(--accent-text); }
+  .empty { color: var(--hint); padding: 8px 0; }
+  .hidden { display: none; }
+  #fallback-btn {
+    position: fixed; left: 16px; right: 16px; bottom: 16px; padding: 14px;
+    border: 0; border-radius: var(--radius); font-size: 16px; font-weight: 600;
+    background: var(--accent); color: var(--accent-text);
+  }
+  #fallback-btn:disabled { opacity: .4; }
+</style>
+</head>
+<body>
+  <h1>Запись на процедуру</h1>
+  <p class="sub">Выберите услугу, день и удобное время</p>
+
+  <h2>Услуга</h2>
+  <div class="services" id="services"></div>
+
+  <section id="days-section" class="hidden">
+    <h2>День</h2>
+    <div class="days" id="days"></div>
+  </section>
+
+  <section id="times-section" class="hidden">
+    <h2>Время</h2>
+    <div class="times" id="times"></div>
+  </section>
+
+  <button id="fallback-btn" class="hidden" disabled>Записаться</button>
+
+<script>
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const inTelegram = !!(tg && tg.initData);
+  const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const ICONS = { manicure: "💅", pedicure: "🦶", brows: "✨", lashes: "👁", haircut: "💇‍♀️" };
+
+  // Бот передаёт настройки и занятое время в параметре ?d= (base64url JSON)
+  function loadConfig() {
+    const raw = new URLSearchParams(location.search).get("d");
+    if (raw) {
+      const b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes));
+    }
+    // Демо-данные для просмотра в обычном браузере
+    return {
+      s: [["manicure", "Маникюр", 60, 1500], ["pedicure", "Педикюр", 90, 2000],
+          ["brows", "Коррекция бровей", 30, 800], ["lashes", "Наращивание ресниц", 120, 2500],
+          ["haircut", "Стрижка", 60, 1800]],
+      h: [10, 20, 30], n: 14, off: [6], b: {},
+    };
+  }
+
+  const cfg = loadConfig();
+  const [WORK_START, WORK_END, STEP] = cfg.h;
+  const state = { service: null, day: null, time: null };
+
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const weekday = d => (d.getDay() + 6) % 7;  // 0 = понедельник, как в Python
+
+  function freeSlots(day, duration) {
+    const busy = cfg.b[iso(day)] || [];
+    const now = new Date();
+    const isToday = iso(day) === iso(now);
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const slots = [];
+    for (let s = WORK_START * 60; s + duration <= WORK_END * 60; s += STEP) {
+      if (isToday && s <= nowMin) continue;
+      if (busy.some(([bs, be]) => s < be && s + duration > bs)) continue;
+      slots.push(s);
+    }
+    return slots;
+  }
+
+  function el(tag, cls, html) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html !== undefined) e.innerHTML = html;
+    return e;
+  }
+
+  function haptic() { if (inTelegram) tg.HapticFeedback.selectionChanged(); }
+
+  function renderServices() {
+    const box = document.getElementById("services");
+    box.innerHTML = "";
+    for (const [key, name, dur, price] of cfg.s) {
+      const card = el("div", "service" + (state.service && state.service[0] === key ? " active" : ""),
+        `<span class="icon">${ICONS[key] || "🌸"}</span>
+         <div><div class="name">${name}</div><div class="meta">${dur} мин</div></div>
+         <span class="price">${price} ₽</span>`);
+      card.onclick = () => {
+        haptic();
+        state.service = [key, name, dur, price];
+        state.time = null;
+        renderServices(); renderDays(); renderTimes(); update();
+      };
+      box.appendChild(card);
+    }
+  }
+
+  function renderDays() {
+    const section = document.getElementById("days-section");
+    const box = document.getElementById("days");
+    section.classList.toggle("hidden", !state.service);
+    if (!state.service) return;
+    box.innerHTML = "";
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let firstAvailable = null;
+    for (let i = 0; i < cfg.n; i++) {
+      const d = new Date(today); d.setDate(today.getDate() + i);
+      const available = !cfg.off.includes(weekday(d)) && freeSlots(d, state.service[2]).length > 0;
+      if (available && !firstAvailable) firstAvailable = iso(d);
+      const chip = el("div", "day" + (available ? "" : " disabled") + (state.day === iso(d) ? " active" : ""),
+        `<div class="wd">${WEEKDAYS[weekday(d)]}</div><div class="num">${d.getDate()}</div>`);
+      chip.onclick = () => { haptic(); state.day = iso(d); state.time = null; renderDays(); renderTimes(); update(); };
+      box.appendChild(chip);
+    }
+    // Если выбранный день стал недоступен для новой услуги — переключаемся на ближайший свободный
+    const stillOk = state.day && [...box.children].some(c => c.classList.contains("active"));
+    if (!stillOk) { state.day = firstAvailable; if (firstAvailable) renderDays(); }
+  }
+
+  function renderTimes() {
+    const section = document.getElementById("times-section");
+    const box = document.getElementById("times");
+    section.classList.toggle("hidden", !state.day);
+    if (!state.day) return;
+    box.innerHTML = "";
+    const [y, m, d] = state.day.split("-").map(Number);
+    const slots = freeSlots(new Date(y, m - 1, d), state.service[2]);
+    if (!slots.length) { box.appendChild(el("div", "empty", "Нет свободного времени")); return; }
+    for (const s of slots) {
+      const t = hhmm(s);
+      const btn = el("div", "time" + (state.time === t ? " active" : ""), t);
+      btn.onclick = () => { haptic(); state.time = t; renderTimes(); update(); };
+      box.appendChild(btn);
+    }
+  }
+
+  function buttonText() {
+    if (!state.time) return "Выберите время";
+    const [, m, d] = state.day.split("-");
+    return `Записаться · ${d}.${m} в ${state.time}`;
+  }
+
+  function update() {
+    const ready = !!(state.service && state.day && state.time);
+    if (inTelegram) {
+      tg.MainButton.setText(buttonText());
+      ready ? tg.MainButton.enable().show() : tg.MainButton.hide();
+    } else {
+      const btn = document.getElementById("fallback-btn");
+      btn.classList.toggle("hidden", !state.service);
+      btn.disabled = !ready;
+      btn.textContent = buttonText();
+    }
+  }
+
+  function submit() {
+    const payload = JSON.stringify({ service: state.service[0], day: state.day, time: state.time });
+    if (inTelegram) tg.sendData(payload);  // приложение закроется, бот получит данные
+    else alert("В Telegram боту уйдёт:\n" + payload);
+  }
+
+  if (inTelegram) {
+    tg.ready();
+    tg.expand();
+    tg.MainButton.onClick(submit);
+  }
+  document.getElementById("fallback-btn").onclick = submit;
+
+  renderServices(); renderDays(); renderTimes(); update();
+</script>
+</body>
+</html>
