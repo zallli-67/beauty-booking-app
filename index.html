@@ -83,7 +83,8 @@
 
 <script>
   const tg = window.Telegram && window.Telegram.WebApp;
-  const inTelegram = !!(tg && tg.initData);
+  // initData пуст при запуске с кнопки клавиатуры, поэтому проверяем платформу
+  const inTelegram = !!(tg && tg.platform && tg.platform !== "unknown");
   const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
   const ICONS = { manicure: "💅", pedicure: "🦶", brows: "✨", lashes: "👁", haircut: "💇‍♀️" };
 
