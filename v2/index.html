@@ -344,19 +344,40 @@
   // Текст отзывов пишут клиенты — экранируем перед вставкой в HTML
   const esc = s => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-  function freeSlots(day, duration, compact = !!cfg.cp && !state.custom) {
+  // Режим записи (как в боте): off — всё свободное время; soft — до и после остаётся 0 или окно от MIN_GAP минут;
+  // strict — только вплотную к записям и краям дня. Старый бот присылал только cp (плотная запись)
+  const [BOOKING_MODE, MIN_GAP] = cfg.bm || [cfg.cp ? "strict" : "off", 0];
+
+  function freeSlots(day, duration, mode = state.custom ? "off" : BOOKING_MODE) {
     const busy = cfg.b[iso(day)] || [];
     const now = new Date();
     const nowMin = iso(day) === iso(now) ? now.getHours() * 60 + now.getMinutes() : -1;
     const fits = s => s > nowMin && s >= WORK_START * 60 && s + duration <= WORK_END * 60
       && !busy.some(([bs, be]) => s < be && s + duration > bs);
-    // Плотная запись: если на день есть предстоящие записи, предлагаем только время
-    // сразу после них или такое, чтобы закончить ровно к их началу (как в боте)
-    const anchors = busy.filter(([, be]) => be > nowMin);
-    const starts = anchors.flatMap(([bs, be]) => [be, bs - duration]);
-    // Без плотной записи — ещё и сетка с шагом STEP (время вплотную, например 10:40, остаётся)
-    if (!compact || !anchors.length) for (let s = WORK_START * 60; s < WORK_END * 60; s += STEP) starts.push(s);
-    return [...new Set(starts)].sort((a, b) => a - b).filter(fits);
+    // Свободные окна дня [начало, конец, начало сдвинуто текущим временем]
+    const windows = [];
+    let start = WORK_START * 60, cut = false;
+    if (nowMin > start) [start, cut] = [nowMin, true];
+    for (const [bs, be] of [...busy].sort((a, b) => a[0] - b[0]).concat([[WORK_END * 60, WORK_END * 60]])) {
+      const end = Math.min(bs, WORK_END * 60);
+      if (end > start) windows.push([start, end, cut]);
+      if (be > start) [start, cut] = [be, false];
+    }
+    // Сетка с шагом STEP плюс время вплотную к записям и краям дня (например, 10:40)
+    const starts = [];
+    for (let s = WORK_START * 60; s < WORK_END * 60; s += STEP) starts.push(s);
+    for (const [ws, we, c] of windows) { if (!c) starts.push(ws); starts.push(we - duration); }
+    return [...new Set(starts)].sort((a, b) => a - b).filter(s => {
+      if (!fits(s)) return false;
+      const [ws, we, c] = windows.find(([ws, we]) => ws <= s && s < we);
+      // Уже прошедшее время всё равно не заполнить, поэтому окно перед слотом сегодня не считаем
+      const before = c ? null : s - ws, after = we - (s + duration);
+      const adjacent = before === 0 || !after;
+      // Вплотную можно всегда: если окно маленькое, без остатка его всё равно не заполнить
+      if (mode === "soft") return adjacent || ((before === null || before >= MIN_GAP) && (!after || after >= MIN_GAP));
+      if (mode === "strict") return adjacent;
+      return true;
+    });
   }
 
   function photo(key, label, extraClass = "") {
@@ -507,7 +528,7 @@
     $("month").textContent = state.day ? MONTHS_NOM[parseIso(state.day).getMonth()] : "";
 
     // При плотной записи клиент может переключиться на любое свободное время — это заявка мастеру
-    const toggle = !cfg.cp ? "" : state.custom
+    const toggle = BOOKING_MODE === "off" ? "" : state.custom
       ? `<button class="custom-link" id="custom-toggle">← Показать рекомендуемое время</button>`
       : `<button class="custom-link" id="custom-toggle">Нет удобного времени? Предложить своё</button>`;
     const note = state.custom
@@ -536,8 +557,8 @@
 
   // Выбранное время не из плотной записи — уйдёт заявкой мастеру
   function isRequest() {
-    if (!cfg.cp || !state.custom || !state.time) return false;
-    return !freeSlots(parseIso(state.day), state.service[2], true).map(hhmm).includes(state.time);
+    if (BOOKING_MODE === "off" || !state.custom || !state.time) return false;
+    return !freeSlots(parseIso(state.day), state.service[2], BOOKING_MODE).map(hhmm).includes(state.time);
   }
 
   // ---------- Подтверждение ----------
