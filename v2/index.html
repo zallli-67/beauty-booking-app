@@ -55,10 +55,6 @@
       radial-gradient(circle at 85% 70%, rgba(255,255,255,.25) 0 22%, transparent 23%),
       linear-gradient(135deg, #e9c3b8, #c9877c 60%, #a9645b);
   }
-  .cover::after {
-    content: "обложка салона"; position: absolute; right: 14px; top: 12px;
-    font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.8);
-  }
   .profile { padding: 0 16px; margin-top: -44px; position: relative; text-align: center; }
   .logo {
     width: 88px; height: 88px; margin: 0 auto; border-radius: 50%;
@@ -83,7 +79,10 @@
 
   .gallery { display: flex; gap: 10px; overflow-x: auto; padding: 0 16px 4px; scrollbar-width: none; }
   .gallery::-webkit-scrollbar { display: none; }
-  .gallery .ph { flex: 0 0 116px; height: 140px; }
+  .gallery .work {
+    flex: 0 0 116px; width: 116px; height: 140px; object-fit: cover; border-radius: 14px;
+    background: var(--card); box-shadow: var(--shadow);
+  }
 
   .step-hint { margin: 4px 16px 12px; color: var(--hint); font-size: 14px; }
 
@@ -260,8 +259,10 @@
 
   const cfg = loadConfig();
   const salon = Object.assign(
-    { name: "Beauty Studio", tagline: "Студия красоты", address: "ул. Примерная, 12", rating: 4.9, reviews: 128 },
+    { name: "Nails Studio", tagline: "Студия красоты", address: "Пр. Строителей 25", rating: 4.9, reviews: 128 },
     cfg.i || {});
+  // Фото работ для раздела «Наши работы» (лежат в works/ рядом со страницей)
+  const WORKS = [1, 2, 3, 4, 5, 6].map(n => `works/${n}.jpg`);
   // Без конструктора (старый бот) — один шаг со всеми услугами
   const menu = cfg.m || { "Услуги": cfg.s.map(([key, name, dur, price]) => [key, name, dur, price, false]) };
   const designs = cfg.ds || [];
@@ -313,9 +314,8 @@
     $("salon-reviews").textContent = ` · ${salon.reviews} ${plural(salon.reviews, "отзыв", "отзыва", "отзывов")}`;
     $("salon-address").textContent = salon.address;
 
-    const hues = [350, 20, 300, 30, 12, 330];
-    $("gallery").innerHTML = hues.map((h, i) =>
-      `<div class="ph" style="--h:${h}" data-label="фото ${i + 1}"></div>`).join("");
+    $("gallery").innerHTML = WORKS.map(src =>
+      `<img class="work" src="${src}" alt="Работа мастера" loading="lazy">`).join("");
 
     $("cats").innerHTML = Object.entries(menu).map(([cat, kinds]) => `
       <div class="service" data-cat="${cat}">
