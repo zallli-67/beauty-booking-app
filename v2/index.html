@@ -336,13 +336,10 @@
     // Плотная запись: если на день есть предстоящие записи, предлагаем только время
     // сразу после них или такое, чтобы закончить ровно к их началу (как в боте)
     const anchors = busy.filter(([, be]) => be > nowMin);
-    let starts = [];
-    if (compact && anchors.length) {
-      starts = [...new Set(anchors.flatMap(([bs, be]) => [be, bs - duration]))].sort((a, b) => a - b);
-    } else {
-      for (let s = WORK_START * 60; s + duration <= WORK_END * 60; s += STEP) starts.push(s);
-    }
-    return starts.filter(fits);
+    const starts = anchors.flatMap(([bs, be]) => [be, bs - duration]);
+    // Без плотной записи — ещё и сетка с шагом STEP (время вплотную, например 10:40, остаётся)
+    if (!compact || !anchors.length) for (let s = WORK_START * 60; s < WORK_END * 60; s += STEP) starts.push(s);
+    return [...new Set(starts)].sort((a, b) => a - b).filter(fits);
   }
 
   function photo(key, label, extraClass = "") {
