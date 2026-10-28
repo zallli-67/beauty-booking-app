@@ -70,6 +70,27 @@
   }
   .pill b { font-weight: 700; }
   .star { color: #e0a43a; }
+  .pill-link { border: 0; font: inherit; font-size: 13px; color: inherit; cursor: pointer; }
+  .pill-link .more { color: var(--hint); font-size: 15px; line-height: 1; }
+
+  /* ---------- Отзывы ---------- */
+  .stars { color: #e0a43a; letter-spacing: 1px; }
+  .stars .off { color: var(--line); }
+  .rv-summary {
+    margin: 14px 16px 0; padding: 18px; display: flex; align-items: center; gap: 16px;
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .rv-summary .big { font-size: 46px; font-weight: 600; line-height: 1; }
+  .rv-summary .stars { font-size: 18px; }
+  .rv-summary .count { color: var(--hint); font-size: 13px; margin-top: 4px; }
+  .rv-list { display: grid; gap: 10px; padding: 12px 16px 24px; }
+  .rv { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; }
+  .rv-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .rv-name { font-weight: 700; }
+  .rv-date { color: var(--hint); font-size: 12px; white-space: nowrap; }
+  .rv .stars { font-size: 14px; margin-top: 2px; }
+  .rv-text { margin-top: 8px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+  .rv-note { margin: 0 16px 24px; text-align: center; color: var(--hint); font-size: 13px; }
 
   .section-title {
     display: flex; align-items: baseline; justify-content: space-between;
@@ -177,7 +198,7 @@
     <h1 class="serif" id="salon-name"></h1>
     <div class="tagline" id="salon-tagline"></div>
     <div class="meta">
-      <span class="pill"><span class="star">★</span><b id="salon-rating"></b><span id="salon-reviews"></span></span>
+      <button class="pill pill-link" id="reviews-pill"></button>
       <span class="pill">📍 <span id="salon-address"></span></span>
     </div>
   </div>
@@ -205,6 +226,12 @@
 </section>
 
 <!-- Дата и время -->
+<!-- Отзывы -->
+<section class="screen" id="reviews">
+  <div class="topbar"><button class="back" data-back>←</button><h2 class="serif">Отзывы</h2></div>
+  <div id="reviews-body"></div>
+</section>
+
 <section class="screen" id="book">
   <div class="topbar"><button class="back" data-back>←</button><h2 class="serif">Дата и время</h2></div>
   <div class="chosen" id="chosen"></div>
@@ -254,13 +281,18 @@
       withDesign
         ? ds.map(([suf, design, extra]) => [key + suf, `${cat}: ${kind.toLowerCase()}, ${design.toLowerCase()}`, dur, price + extra])
         : [[key, `${cat}: ${kind.toLowerCase()}`, dur, price]]));
-    return { s, m, ds, h: [10, 20, 30], n: 14, off: [6], b: {} };
+    const r = { a: 4.5, n: 2, l: [
+      ["Анна", 5, "Очень аккуратный френч, держится уже третью неделю! Обязательно приду ещё.", "2026-10-20"],
+      ["Мария", 4, "", "2026-10-18"]] };
+    return { s, m, ds, r, h: [10, 20, 30], n: 14, off: [6], b: {} };
   }
 
   const cfg = loadConfig();
   const salon = Object.assign(
-    { name: "Nails Studio", tagline: "Студия красоты", address: "Пр. Строителей 25", rating: 4.9, reviews: 128 },
+    { name: "Nails Studio", tagline: "Студия красоты", address: "Пр. Строителей 25" },
     cfg.i || {});
+  // Одобренные отзывы: a — средняя оценка, n — сколько всего, l — последние [имя, оценка, текст, дата]
+  const reviews = cfg.r || { a: 0, n: 0, l: [] };
   // Фото работ для раздела «Наши работы» (лежат в works/ рядом со страницей)
   const WORKS = [1, 2, 3, 4, 5, 6].map(n => `works/${n}.jpg`);
   // Без конструктора (старый бот) — один шаг со всеми услугами
@@ -280,6 +312,10 @@
   const rub = p => `${p.toLocaleString("ru-RU")} ₽`;
   const fmtDur = m => [Math.floor(m / 60) && `${Math.floor(m / 60)} ч`, m % 60 && `${m % 60} мин`].filter(Boolean).join(" ");
   const findService = key => cfg.s.find(s => s[0] === key);
+  const fmtRating = a => a.toFixed(1).replace(".", ",");
+  const starsHtml = n => `<span class="stars">${"★".repeat(n)}<span class="off">${"★".repeat(5 - n)}</span></span>`;
+  // Текст отзывов пишут клиенты — экранируем перед вставкой в HTML
+  const esc = s => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
   function freeSlots(day, duration) {
     const busy = cfg.b[iso(day)] || [];
@@ -310,8 +346,10 @@
     $("logo").textContent = salon.name.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
     $("salon-name").textContent = salon.name;
     $("salon-tagline").textContent = salon.tagline;
-    $("salon-rating").textContent = salon.rating;
-    $("salon-reviews").textContent = ` · ${salon.reviews} ${plural(salon.reviews, "отзыв", "отзыва", "отзывов")}`;
+    $("reviews-pill").innerHTML = reviews.n
+      ? `<span class="star">★</span><b>${fmtRating(reviews.a)}</b> · ${reviews.n} ${plural(reviews.n, "отзыв", "отзыва", "отзывов")} <span class="more">›</span>`
+      : `<span class="star">★</span>Отзывы <span class="more">›</span>`;
+    $("reviews-pill").onclick = () => { haptic("tap"); go("reviews"); };
     $("salon-address").textContent = salon.address;
 
     $("gallery").innerHTML = WORKS.map(src =>
@@ -330,6 +368,38 @@
     $("cats").querySelectorAll(".service").forEach(el => el.onclick = () => {
       haptic("tap"); state.category = el.dataset.cat; go("kind");
     });
+  }
+
+  // ---------- Отзывы ----------
+  function renderReviews() {
+    if (!reviews.n) {
+      $("reviews-body").innerHTML = `
+        <div class="rv-summary"><div>
+          <div class="rv-name">Пока нет отзывов</div>
+          <div class="count">Будьте первыми — нажмите «⭐ Оставить отзыв» в меню бота</div>
+        </div></div>`;
+      return;
+    }
+    const cards = reviews.l.map(([name, rating, text, day]) => {
+      const d = parseIso(day);
+      return `
+      <div class="rv">
+        <div class="rv-head">
+          <span class="rv-name">${esc(name || "Клиент")}</span>
+          <span class="rv-date">${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}</span>
+        </div>
+        ${starsHtml(rating)}
+        ${text ? `<div class="rv-text">${esc(text)}</div>` : ""}
+      </div>`;
+    }).join("");
+    $("reviews-body").innerHTML = `
+      <div class="rv-summary">
+        <div class="big serif">${fmtRating(reviews.a)}</div>
+        <div>${starsHtml(Math.round(reviews.a))}
+          <div class="count">${reviews.n} ${plural(reviews.n, "отзыв", "отзыва", "отзывов")}</div></div>
+      </div>
+      <div class="rv-list">${cards}</div>
+      ${reviews.n > reviews.l.length ? `<p class="rv-note">Показаны последние ${reviews.l.length}</p>` : ""}`;
   }
 
   // ---------- Конструктор: вид ----------
@@ -442,7 +512,7 @@
   // ---------- Навигация и главная кнопка ----------
   // С даты возвращаемся на дизайн, если он был, иначе на выбор вида
   const backOf = screen => ({
-    kind: "home", design: "kind", confirm: "book",
+    kind: "home", reviews: "home", design: "kind", confirm: "book",
     book: state.kind && state.kind[4] && designs.length ? "design" : "kind",
   })[screen];
 
@@ -451,6 +521,7 @@
     document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === screen));
     window.scrollTo(0, 0);
     if (screen === "home") renderHome();
+    if (screen === "reviews") renderReviews();
     if (screen === "kind") renderKind();
     if (screen === "design") renderDesign();
     if (screen === "book") renderBook();
