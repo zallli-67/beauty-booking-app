@@ -164,6 +164,15 @@
   }
   .time.active { background: var(--accent); border-color: var(--accent); color: #fff; }
   .empty { margin: 8px 16px; color: var(--hint); }
+  .custom-link {
+    display: block; margin: 18px auto 8px; padding: 8px 12px; border: 0; background: none; cursor: pointer;
+    font: inherit; font-size: 14px; font-weight: 600; color: var(--accent-dark);
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .custom-note {
+    margin: 0 16px 4px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4;
+    background: var(--accent-soft); color: var(--accent-dark);
+  }
 
   /* ---------- Подтверждение ---------- */
   .ticket { margin: 14px 16px 0; background: var(--card); border-radius: 22px; box-shadow: var(--shadow); overflow: hidden; }
@@ -244,7 +253,7 @@
 <section class="screen" id="confirm">
   <div class="topbar"><button class="back" data-back>←</button><h2 class="serif">Проверьте запись</h2></div>
   <div class="ticket" id="ticket"></div>
-  <p class="note">Отменить запись можно в боте в разделе «Мои записи»</p>
+  <p class="note" id="confirm-note"></p>
 </section>
 
 <button id="fallback-btn" class="hidden"></button>
@@ -300,7 +309,8 @@
   const designs = cfg.ds || [];
   const [WORK_START, WORK_END, STEP] = cfg.h;
   // category — выбранная категория, kind — вид из конструктора, service — итоговая услуга [ключ, название, мин, цена]
-  const state = { screen: "home", category: null, kind: null, service: null, day: null, time: null };
+  // custom — клиент выбирает любое свободное время (заявка мастеру), а не только плотную запись
+  const state = { screen: "home", category: null, kind: null, service: null, day: null, time: null, custom: false };
 
   const $ = id => document.getElementById(id);
   const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -317,18 +327,22 @@
   // Текст отзывов пишут клиенты — экранируем перед вставкой в HTML
   const esc = s => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-  function freeSlots(day, duration) {
+  function freeSlots(day, duration, compact = !!cfg.cp && !state.custom) {
     const busy = cfg.b[iso(day)] || [];
     const now = new Date();
-    const isToday = iso(day) === iso(now);
-    const nowMin = now.getHours() * 60 + now.getMinutes();
-    const slots = [];
-    for (let s = WORK_START * 60; s + duration <= WORK_END * 60; s += STEP) {
-      if (isToday && s <= nowMin) continue;
-      if (busy.some(([bs, be]) => s < be && s + duration > bs)) continue;
-      slots.push(s);
+    const nowMin = iso(day) === iso(now) ? now.getHours() * 60 + now.getMinutes() : -1;
+    const fits = s => s > nowMin && s >= WORK_START * 60 && s + duration <= WORK_END * 60
+      && !busy.some(([bs, be]) => s < be && s + duration > bs);
+    // Плотная запись: если на день есть предстоящие записи, предлагаем только время
+    // сразу после них или такое, чтобы закончить ровно к их началу (как в боте)
+    const anchors = busy.filter(([, be]) => be > nowMin);
+    let starts = [];
+    if (compact && anchors.length) {
+      starts = [...new Set(anchors.flatMap(([bs, be]) => [be, bs - duration]))].sort((a, b) => a - b);
+    } else {
+      for (let s = WORK_START * 60; s + duration <= WORK_END * 60; s += STEP) starts.push(s);
     }
-    return slots;
+    return starts.filter(fits);
   }
 
   function photo(key, label, extraClass = "") {
@@ -450,7 +464,7 @@
   // Итоговая услуга выбрана — к дате и времени
   function choose(service) {
     state.service = service;
-    state.day = null; state.time = null;
+    state.day = null; state.time = null; state.custom = false;
     go("book");
   }
 
@@ -478,19 +492,38 @@
     });
     $("month").textContent = state.day ? MONTHS_NOM[parseIso(state.day).getMonth()] : "";
 
-    if (!state.day) { $("times").innerHTML = `<p class="empty">Нет свободных дней</p>`; return; }
-    const slots = freeSlots(parseIso(state.day), dur);
-    const periods = [["Утро", 0, 12 * 60], ["День", 12 * 60, 17 * 60], ["Вечер", 17 * 60, 24 * 60]];
-    $("times").innerHTML = `<div class="label">Время</div>` + periods.map(([title, from, to]) => {
-      const list = slots.filter(s => s >= from && s < to);
-      if (!list.length) return "";
-      return `<div class="period"><div class="period-title">${title}</div><div class="times">${
-        list.map(s => `<div class="time${state.time === hhmm(s) ? " active" : ""}" data-time="${hhmm(s)}">${hhmm(s)}</div>`).join("")
-      }</div></div>`;
-    }).join("");
-    $("times").querySelectorAll(".time").forEach(el => el.onclick = () => {
-      haptic(); state.time = el.dataset.time; renderBook(); update();
-    });
+    // При плотной записи клиент может переключиться на любое свободное время — это заявка мастеру
+    const toggle = !cfg.cp ? "" : state.custom
+      ? `<button class="custom-link" id="custom-toggle">← Показать рекомендуемое время</button>`
+      : `<button class="custom-link" id="custom-toggle">Нет удобного времени? Предложить своё</button>`;
+    const note = state.custom
+      ? `<p class="custom-note">Выберите любое свободное время — мастер подтвердит запись, ответ придёт в чат с ботом.</p>` : "";
+
+    if (!state.day) {
+      $("times").innerHTML = note + `<p class="empty">Нет свободных дней</p>` + toggle;
+    } else {
+      const slots = freeSlots(parseIso(state.day), dur);
+      const periods = [["Утро", 0, 12 * 60], ["День", 12 * 60, 17 * 60], ["Вечер", 17 * 60, 24 * 60]];
+      $("times").innerHTML = `<div class="label">Время</div>` + note + periods.map(([title, from, to]) => {
+        const list = slots.filter(s => s >= from && s < to);
+        if (!list.length) return "";
+        return `<div class="period"><div class="period-title">${title}</div><div class="times">${
+          list.map(s => `<div class="time${state.time === hhmm(s) ? " active" : ""}" data-time="${hhmm(s)}">${hhmm(s)}</div>`).join("")
+        }</div></div>`;
+      }).join("") + toggle;
+      $("times").querySelectorAll(".time").forEach(el => el.onclick = () => {
+        haptic(); state.time = el.dataset.time; renderBook(); update();
+      });
+    }
+    if ($("custom-toggle")) $("custom-toggle").onclick = () => {
+      haptic(); state.custom = !state.custom; state.day = null; state.time = null; renderBook(); update();
+    };
+  }
+
+  // Выбранное время не из плотной записи — уйдёт заявкой мастеру
+  function isRequest() {
+    if (!cfg.cp || !state.custom || !state.time) return false;
+    return !freeSlots(parseIso(state.day), state.service[2], true).map(hhmm).includes(state.time);
   }
 
   // ---------- Подтверждение ----------
@@ -507,6 +540,9 @@
         <div class="row"><span class="k">Адрес</span><span class="v">${salon.address}</span></div>
         <div class="total"><span class="k">Итого</span><span class="v">${rub(price)}</span></div>
       </div>`;
+    $("confirm-note").textContent = isRequest()
+      ? "Это время нужно подтвердить у мастера — ответ придёт в чат с ботом"
+      : "Отменить запись можно в боте в разделе «Мои записи»";
   }
 
   // ---------- Навигация и главная кнопка ----------
@@ -539,7 +575,9 @@
       const d = parseIso(state.day);
       return { text: `Далее · ${d.getDate()} ${MONTHS[d.getMonth()]}, ${state.time}`, enabled: true, visible: true };
     }
-    if (state.screen === "confirm") return { text: "Подтвердить запись", enabled: true, visible: true };
+    if (state.screen === "confirm") {
+      return { text: isRequest() ? "Отправить заявку мастеру" : "Подтвердить запись", enabled: true, visible: true };
+    }
     return { visible: false };
   }
 
