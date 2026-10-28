@@ -85,17 +85,7 @@
   .gallery::-webkit-scrollbar { display: none; }
   .gallery .ph { flex: 0 0 116px; height: 140px; }
 
-  .tabs {
-    position: sticky; top: 0; z-index: 5; background: var(--bg);
-    display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; scrollbar-width: none;
-  }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab {
-    flex: 0 0 auto; border: 0; border-radius: 999px; padding: 8px 16px; cursor: pointer;
-    background: var(--card); color: var(--text); font-weight: 600; font-size: 14px;
-    box-shadow: var(--shadow); transition: background .15s, color .15s;
-  }
-  .tab.active { background: var(--accent); color: #fff; }
+  .step-hint { margin: 4px 16px 12px; color: var(--hint); font-size: 14px; }
 
   .services { display: grid; gap: 10px; padding: 4px 16px 0; }
   .service {
@@ -197,8 +187,22 @@
   <div class="gallery" id="gallery"></div>
 
   <div class="section-title serif">Услуги</div>
-  <div class="tabs" id="tabs"></div>
-  <div class="services" id="services"></div>
+  <div class="services" id="cats"></div>
+</section>
+
+<!-- Конструктор: вид услуги -->
+<section class="screen" id="kind">
+  <div class="topbar"><button class="back" data-back>←</button><h2 class="serif" id="kind-title"></h2></div>
+  <p class="step-hint">Выберите вид</p>
+  <div class="services" id="kinds"></div>
+</section>
+
+<!-- Конструктор: дизайн покрытия -->
+<section class="screen" id="design">
+  <div class="topbar"><button class="back" data-back>←</button><h2 class="serif">Дизайн</h2></div>
+  <div class="chosen" id="design-chosen"></div>
+  <p class="step-hint" style="margin-top: 18px">Выберите дизайн покрытия</p>
+  <div class="services" id="designs"></div>
 </section>
 
 <!-- Дата и время -->
@@ -227,12 +231,10 @@
   const WEEKDAYS_FULL = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
   const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
   const MONTHS_NOM = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
-  // Оттенок заглушки фото и иконка для каждой услуги
-  const LOOK = {
-    manicure: [350, "💅"], pedicure: [20, "🦶"], brows: [30, "✨"],
-    lashes: [300, "👁"], haircut: [12, "💇‍♀️"],
-  };
-  const look = key => LOOK[key] || [15, "🌸"];
+  // Оттенок заглушки фото и иконка: по началу ключа услуги, у френча своя
+  const LOOK = { manicure: [350, "💅"], nail: [340, "💅"], pedicure: [20, "🦶"] };
+  const look = key => key.endsWith("_french") ? [0, "🤍"]
+    : LOOK[Object.keys(LOOK).find(k => key.startsWith(k))] || [15, "🌸"];
 
   // Бот передаёт настройки и занятое время в параметре ?d= (base64url JSON)
   function loadConfig() {
@@ -242,22 +244,30 @@
       const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
       return JSON.parse(new TextDecoder().decode(bytes));
     }
-    // Демо-данные для просмотра в обычном браузере
-    return {
-      s: [["manicure", "Маникюр", 60, 1500], ["pedicure", "Педикюр", 90, 2000],
-          ["brows", "Коррекция бровей", 30, 800], ["lashes", "Наращивание ресниц", 120, 2500],
-          ["haircut", "Стрижка", 60, 1800]],
-      h: [10, 20, 30], n: 14, off: [6], b: {},
+    // Демо-данные для просмотра в обычном браузере (плоский список s бот собирает так же)
+    const m = {
+      "Маникюр": [["manicure", "Без покрытия", 40, 1200, false], ["manicure_gel", "С покрытием", 90, 1700, true],
+                  ["nail_extension", "Наращивание", 150, 3000, true]],
+      "Педикюр": [["pedicure", "Полный", 90, 2200, true], ["pedicure_basic", "Стопы и пальцы", 60, 1700, false]],
     };
+    const ds = [["", "Однотон", 0], ["_french", "Френч", 300]];
+    const s = Object.entries(m).flatMap(([cat, kinds]) => kinds.flatMap(([key, kind, dur, price, withDesign]) =>
+      withDesign
+        ? ds.map(([suf, design, extra]) => [key + suf, `${cat}: ${kind.toLowerCase()}, ${design.toLowerCase()}`, dur, price + extra])
+        : [[key, `${cat}: ${kind.toLowerCase()}`, dur, price]]));
+    return { s, m, ds, h: [10, 20, 30], n: 14, off: [6], b: {} };
   }
 
   const cfg = loadConfig();
   const salon = Object.assign(
     { name: "Beauty Studio", tagline: "Студия красоты", address: "ул. Примерная, 12", rating: 4.9, reviews: 128 },
     cfg.i || {});
-  const categories = cfg.c || { "Ногти": ["manicure", "pedicure"], "Брови и ресницы": ["brows", "lashes"], "Волосы": ["haircut"] };
+  // Без конструктора (старый бот) — один шаг со всеми услугами
+  const menu = cfg.m || { "Услуги": cfg.s.map(([key, name, dur, price]) => [key, name, dur, price, false]) };
+  const designs = cfg.ds || [];
   const [WORK_START, WORK_END, STEP] = cfg.h;
-  const state = { screen: "home", tab: "Все", service: null, day: null, time: null };
+  // category — выбранная категория, kind — вид из конструктора, service — итоговая услуга [ключ, название, мин, цена]
+  const state = { screen: "home", category: null, kind: null, service: null, day: null, time: null };
 
   const $ = id => document.getElementById(id);
   const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -266,6 +276,9 @@
   const weekday = d => (d.getDay() + 6) % 7;  // 0 = понедельник, как в Python
   const plural = (n, one, few, many) =>
     n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many;
+  const rub = p => `${p.toLocaleString("ru-RU")} ₽`;
+  const fmtDur = m => [Math.floor(m / 60) && `${Math.floor(m / 60)} ч`, m % 60 && `${m % 60} мин`].filter(Boolean).join(" ");
+  const findService = key => cfg.s.find(s => s[0] === key);
 
   function freeSlots(day, duration) {
     const busy = cfg.b[iso(day)] || [];
@@ -304,37 +317,78 @@
     $("gallery").innerHTML = hues.map((h, i) =>
       `<div class="ph" style="--h:${h}" data-label="фото ${i + 1}"></div>`).join("");
 
-    const tabs = ["Все", ...Object.keys(categories)];
-    $("tabs").innerHTML = tabs.map(t =>
-      `<button class="tab${t === state.tab ? " active" : ""}" data-tab="${t}">${t}</button>`).join("");
-    $("tabs").querySelectorAll(".tab").forEach(b => b.onclick = () => {
-      haptic(); state.tab = b.dataset.tab; renderHome();
-    });
-
-    const visible = cfg.s.filter(([key]) => state.tab === "Все" || (categories[state.tab] || []).includes(key));
-    $("services").innerHTML = visible.map(([key, name, dur, price]) => `
-      <div class="service" data-key="${key}">
-        ${photo(key, "фото")}
+    $("cats").innerHTML = Object.entries(menu).map(([cat, kinds]) => `
+      <div class="service" data-cat="${cat}">
+        ${photo(kinds[0][0], "фото")}
         <div class="info">
-          <div class="name">${name}</div>
-          <div class="dur">${dur} мин</div>
-          <div class="price">${price.toLocaleString("ru-RU")} ₽</div>
+          <div class="name">${cat}</div>
+          <div class="dur">${kinds.length} ${plural(kinds.length, "вид", "вида", "видов")}</div>
+          <div class="price">от ${rub(Math.min(...kinds.map(k => k[3])))}</div>
         </div>
         <div class="chev">›</div>
       </div>`).join("");
-    $("services").querySelectorAll(".service").forEach(el => el.onclick = () => {
-      haptic("tap");
-      state.service = cfg.s.find(s => s[0] === el.dataset.key);
-      state.day = null; state.time = null;
-      go("book");
+    $("cats").querySelectorAll(".service").forEach(el => el.onclick = () => {
+      haptic("tap"); state.category = el.dataset.cat; go("kind");
     });
+  }
+
+  // ---------- Конструктор: вид ----------
+  function renderKind() {
+    $("kind-title").textContent = state.category;
+    const kinds = menu[state.category];
+    $("kinds").innerHTML = kinds.map(([key, kind, dur, price, withDesign], i) => `
+      <div class="service" data-i="${i}">
+        ${photo(key, "фото")}
+        <div class="info">
+          <div class="name">${kind}</div>
+          <div class="dur">${fmtDur(dur)}</div>
+          <div class="price">${withDesign ? "от " : ""}${rub(price)}</div>
+        </div>
+        <div class="chev">›</div>
+      </div>`).join("");
+    $("kinds").querySelectorAll(".service").forEach(el => el.onclick = () => {
+      haptic("tap");
+      state.kind = kinds[el.dataset.i];
+      if (state.kind[4] && designs.length) { go("design"); return; }
+      choose(findService(state.kind[0]));
+    });
+  }
+
+  // ---------- Конструктор: дизайн ----------
+  function renderDesign() {
+    const [key, kind, dur] = state.kind;
+    $("design-chosen").innerHTML = `${photo(key, "")}
+      <div><div class="name">${state.category}: ${kind.toLowerCase()}</div><div class="sub">${fmtDur(dur)}</div></div>`;
+    $("designs").innerHTML = designs.map(([suffix, design, extra]) => {
+      const [skey, , , price] = findService(key + suffix);
+      return `
+      <div class="service" data-key="${skey}">
+        ${photo(skey, "фото")}
+        <div class="info">
+          <div class="name">${design}</div>
+          <div class="dur">${extra ? `+${rub(extra)} к цене` : "без доплаты"}</div>
+          <div class="price">${rub(price)}</div>
+        </div>
+        <div class="chev">›</div>
+      </div>`;
+    }).join("");
+    $("designs").querySelectorAll(".service").forEach(el => el.onclick = () => {
+      haptic("tap"); choose(findService(el.dataset.key));
+    });
+  }
+
+  // Итоговая услуга выбрана — к дате и времени
+  function choose(service) {
+    state.service = service;
+    state.day = null; state.time = null;
+    go("book");
   }
 
   // ---------- Дата и время ----------
   function renderBook() {
     const [key, name, dur, price] = state.service;
     $("chosen").innerHTML = `${photo(key, "")}
-      <div><div class="name">${name}</div><div class="sub">${dur} мин · ${price.toLocaleString("ru-RU")} ₽</div></div>`;
+      <div><div class="name">${name}</div><div class="sub">${fmtDur(dur)} · ${rub(price)}</div></div>`;
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const days = [];
@@ -379,28 +433,34 @@
         <h3 class="serif">${name}</h3>
         <div class="row"><span class="k">Дата</span><span class="v">${d.getDate()} ${MONTHS[d.getMonth()]}, ${WEEKDAYS_FULL[weekday(d)]}</span></div>
         <div class="row"><span class="k">Время</span><span class="v">${state.time}</span></div>
-        <div class="row"><span class="k">Длительность</span><span class="v">${dur} мин</span></div>
+        <div class="row"><span class="k">Длительность</span><span class="v">${fmtDur(dur)}</span></div>
         <div class="row"><span class="k">Адрес</span><span class="v">${salon.address}</span></div>
-        <div class="total"><span class="k">Итого</span><span class="v">${price.toLocaleString("ru-RU")} ₽</span></div>
+        <div class="total"><span class="k">Итого</span><span class="v">${rub(price)}</span></div>
       </div>`;
   }
 
   // ---------- Навигация и главная кнопка ----------
-  const BACK = { book: "home", confirm: "book" };
+  // С даты возвращаемся на дизайн, если он был, иначе на выбор вида
+  const backOf = screen => ({
+    kind: "home", design: "kind", confirm: "book",
+    book: state.kind && state.kind[4] && designs.length ? "design" : "kind",
+  })[screen];
 
   function go(screen) {
     state.screen = screen;
     document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === screen));
     window.scrollTo(0, 0);
     if (screen === "home") renderHome();
+    if (screen === "kind") renderKind();
+    if (screen === "design") renderDesign();
     if (screen === "book") renderBook();
     if (screen === "confirm") renderConfirm();
-    if (inTelegram) BACK[screen] ? tg.BackButton.show() : tg.BackButton.hide();
+    if (inTelegram) backOf(screen) ? tg.BackButton.show() : tg.BackButton.hide();
     document.querySelectorAll("[data-back]").forEach(b => b.classList.toggle("hidden", inTelegram));
     update();
   }
 
-  function goBack() { if (BACK[state.screen]) { haptic(); go(BACK[state.screen]); } }
+  function goBack() { const prev = backOf(state.screen); if (prev) { haptic(); go(prev); } }
 
   function mainButton() {
     if (state.screen === "book") {
