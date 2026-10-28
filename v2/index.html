@@ -216,7 +216,7 @@
   <div class="gallery" id="gallery"></div>
 
   <div class="section-title serif">Услуги</div>
-  <div class="services" id="cats"></div>
+  <div class="services" id="cats"><p class="empty">Загружаем…</p></div>
 </section>
 
 <!-- Конструктор: вид услуги -->
@@ -258,7 +258,8 @@
 
 <button id="fallback-btn" class="hidden"></button>
 
-<script>
+<!-- module: позволяет дождаться данных от бота (await) до отрисовки -->
+<script type="module">
   const tg = window.Telegram && window.Telegram.WebApp;
   // initData пуст при запуске с кнопки клавиатуры, поэтому проверяем платформу
   const inTelegram = !!(tg && tg.platform && tg.platform !== "unknown");
@@ -271,9 +272,18 @@
   const look = key => key.endsWith("_french") ? [0, "🤍"]
     : LOOK[Object.keys(LOOK).find(k => key.startsWith(k))] || [15, "🌸"];
 
-  // Бот передаёт настройки и занятое время в параметре ?d= (base64url JSON)
-  function loadConfig() {
-    const raw = new URLSearchParams(location.search).get("d");
+  // Данные берём у бота при каждом открытии (?api=адрес бота), иначе — из параметра ?d= (base64url JSON)
+  async function loadConfig() {
+    const params = new URLSearchParams(location.search);
+    const api = params.get("api");
+    if (api) {
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), 10000);
+      const r = await fetch(`${api.replace(/\/+$/, "")}/api/config`, { cache: "no-store", signal: ctrl.signal });
+      if (!r.ok) throw new Error(`API ответил ${r.status}`);
+      return r.json();
+    }
+    const raw = params.get("d");
     if (raw) {
       const b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
       const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
@@ -296,7 +306,14 @@
     return { s, m, ds, r, h: [10, 20, 30], n: 14, off: [6], b: {} };
   }
 
-  const cfg = loadConfig();
+  let cfg;
+  try {
+    cfg = await loadConfig();
+  } catch (e) {
+    document.getElementById("cats").innerHTML =
+      `<p class="empty">Не удалось загрузить расписание. Закройте приложение и откройте его ещё раз.</p>`;
+    throw e;
+  }
   const salon = Object.assign(
     { name: "Nails Studio", tagline: "Студия красоты", address: "Пр. Строителей 25" },
     cfg.i || {});
